@@ -235,20 +235,36 @@ renderer.domElement.addEventListener('mousemove', (e) => {
   renderer.domElement.style.cursor = findParticleAt(e) !== -1 ? 'pointer' : 'default';
 });
 
+// Mobile: use touchend for tap detection because OrbitControls calls preventDefault()
+// on touchstart, which suppresses the browser's synthesized click event.
 let touchStartPos = null;
+let touchStartTime = 0;
+
 renderer.domElement.addEventListener('touchstart', (e) => {
   if (e.touches.length === 1) {
     touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    touchStartTime = Date.now();
+  } else {
+    touchStartPos = null; // multi-touch gesture, not a tap
   }
 }, { passive: true });
 
+renderer.domElement.addEventListener('touchend', (e) => {
+  if (!touchStartPos || e.changedTouches.length !== 1) { touchStartPos = null; return; }
+  const touch = e.changedTouches[0];
+  const dx = touch.clientX - touchStartPos.x;
+  const dy = touch.clientY - touchStartPos.y;
+  const held = Date.now() - touchStartTime;
+  touchStartPos = null;
+  if (dx * dx + dy * dy > 100 || held > 400) return; // drag or long-press, not a tap
+  const idx = findParticleAt({ clientX: touch.clientX, clientY: touch.clientY });
+  if (idx === -1) return;
+  const block = arenaBlocks[texIndicesArray[idx]];
+  if (block) openLightbox(block);
+}, { passive: true });
+
 renderer.domElement.addEventListener('click', (e) => {
-  if (touchStartPos !== null) {
-    const dx = e.clientX - touchStartPos.x;
-    const dy = e.clientY - touchStartPos.y;
-    touchStartPos = null;
-    if (dx * dx + dy * dy > 100) return; // suppress click after drag
-  }
+  if (isMobile) return; // taps handled above via touchend
   const idx = findParticleAt(e);
   if (idx === -1) return;
   const block = arenaBlocks[texIndicesArray[idx]];
