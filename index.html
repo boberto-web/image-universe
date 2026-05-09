@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Image Universe</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -45,6 +45,45 @@
     letter-spacing: 0.08em;
     pointer-events: none;
     text-transform: uppercase;
+  }
+  #gyro-btn {
+    display: none;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: none;
+    border: 1px solid rgba(138,138,138,0.35);
+    color: #8A8A8A;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    z-index: 10;
+    transition: color 0.2s, border-color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #gyro-btn.active {
+    color: #505050;
+    border-color: rgba(80,80,80,0.5);
+  }
+  @media (hover: none) and (pointer: coarse) {
+    #logo {
+      top: 20px;
+      left: 20px;
+      right: auto;
+      width: 60px;
+    }
+    #ui {
+      top: 60px;
+      left: 20px;
+    }
+    #credit {
+      bottom: 20px;
+      right: 20px;
+    }
   }
   #loading {
     position: fixed;
@@ -153,6 +192,7 @@
 </a>
 
 <div id="credit">Made by Bob &copy; 2026</div>
+<button id="gyro-btn">Tilt</button>
 
 <div id="ui">
   Drag to rotate &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Right-drag to pan

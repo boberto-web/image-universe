@@ -3,12 +3,21 @@ const SPREAD = 600;
 const ARENA_SLUG = 'vg-art';
 const CELL = 128;
 
+const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
 // Picking state — original (unsorted) arrays, populated in buildScene
 let arenaBlocks     = [];
 let texIndicesArray = [];
 let positionsArray  = null;
 let sizesArray      = null;
 let pointsMesh      = null;
+
+// Gyroscope state
+const gyroTarget  = { x: 0, y: 0 };
+const gyroCurrent = { x: 0, y: 0 };
+let gyroEnabled  = false;
+let initialBeta  = null;
+let initialGamma = null;
 
 // --- Scene setup ---
 
@@ -30,6 +39,12 @@ controls.zoomSpeed = 0.8;
 controls.panSpeed = 0.6;
 controls.minDistance = 100;
 controls.maxDistance = 2000;
+
+if (isMobile) {
+  controls.rotateSpeed = 1.0;
+  controls.zoomSpeed   = 1.2;
+  controls.panSpeed    = 0.9;
+}
 
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -220,12 +235,75 @@ renderer.domElement.addEventListener('mousemove', (e) => {
   renderer.domElement.style.cursor = findParticleAt(e) !== -1 ? 'pointer' : 'default';
 });
 
+let touchStartPos = null;
+renderer.domElement.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }
+}, { passive: true });
+
 renderer.domElement.addEventListener('click', (e) => {
+  if (touchStartPos !== null) {
+    const dx = e.clientX - touchStartPos.x;
+    const dy = e.clientY - touchStartPos.y;
+    touchStartPos = null;
+    if (dx * dx + dy * dy > 100) return; // suppress click after drag
+  }
   const idx = findParticleAt(e);
   if (idx === -1) return;
   const block = arenaBlocks[texIndicesArray[idx]];
   if (block) openLightbox(block);
 });
+
+// --- Mobile & gyroscope ---
+
+function updateHintText() {
+  const ui = document.getElementById('ui');
+  if (isMobile) {
+    ui.innerHTML = 'Drag to rotate &nbsp;·&nbsp; Pinch to zoom<br>'
+      + 'Two-finger drag to pan'
+      + (gyroEnabled ? '<br>Tilt to explore' : '');
+  }
+}
+
+function enableGyro() {
+  gyroEnabled = true;
+  window.addEventListener('deviceorientation', (e) => {
+    if (e.beta == null || e.gamma == null) return;
+    if (initialBeta === null) { initialBeta = e.beta; initialGamma = e.gamma; }
+    gyroTarget.x = Math.max(-1, Math.min(1, (e.beta  - initialBeta)  / 45)) * 0.5;
+    gyroTarget.y = Math.max(-1, Math.min(1, (e.gamma - initialGamma) / 45)) * 0.5;
+  });
+  const btn = document.getElementById('gyro-btn');
+  btn.textContent = 'Recalibrate';
+  btn.classList.add('active');
+  updateHintText();
+}
+
+async function initGyro() {
+  if (!isMobile) return;
+  const btn = document.getElementById('gyro-btn');
+  btn.style.display = 'block';
+
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // iOS 13+ — permission required from user gesture
+    btn.addEventListener('click', async () => {
+      if (!gyroEnabled) {
+        try {
+          const perm = await DeviceOrientationEvent.requestPermission();
+          if (perm === 'granted') enableGyro();
+        } catch (_) {}
+      } else {
+        initialBeta = null; initialGamma = null; // recalibrate
+      }
+    });
+  } else {
+    // Android / other — auto-enable, button recalibrates
+    enableGyro();
+    btn.addEventListener('click', () => { initialBeta = null; initialGamma = null; });
+  }
+}
 
 // --- Scene builder ---
 
@@ -288,7 +366,10 @@ function buildScene(vertexShader, fragmentShader, atlasTex, atlasCols, atlasRows
     opacity: 0,
     duration: 0.8,
     delay: 0.3,
-    onComplete: () => { loadingEl.style.display = 'none'; }
+    onComplete: () => {
+      loadingEl.style.display = 'none';
+      if (isMobile) { updateHintText(); initGyro(); }
+    }
   });
 
   let userActive = false;
@@ -302,13 +383,19 @@ function buildScene(vertexShader, fragmentShader, atlasTex, atlasCols, atlasRows
   });
 
   let t = 0;
+  let baseRotX = 0;
+  let baseRotY = 0;
   function animate() {
     requestAnimationFrame(animate);
     t += 0.0005;
     if (!userActive) {
-      pointsMesh.rotation.y += 0.0008;
-      pointsMesh.rotation.x = Math.sin(t) * 0.08;
+      baseRotY += 0.0008;
+      baseRotX = Math.sin(t) * 0.08;
     }
+    gyroCurrent.x += (gyroTarget.x - gyroCurrent.x) * 0.04;
+    gyroCurrent.y += (gyroTarget.y - gyroCurrent.y) * 0.04;
+    pointsMesh.rotation.x = baseRotX + gyroCurrent.x;
+    pointsMesh.rotation.y = baseRotY + gyroCurrent.y;
     controls.update();
     sortParticles(); // re-sort every frame to maintain correct draw order
     renderer.render(scene, camera);
